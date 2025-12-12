@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600">
+  <!-- Nền đỏ -->
+  <rect width="900" height="600" fill="#da251d"/>
+  <!-- Ngôi sao vàng 5 cánh -->
+  <polygon points="450,120 494,264 650,264 523,355 567,500 450,409 333,500 377,355 250,264 406,264" fill="#ffcd00"/>
+</svg>
+
+
+
+

@@ -1,0 +1,367 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "BIỂN ĐÔNG",
+        "name_en": "East Sea",
+        "type": "sea_label"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [113.0, 13.0]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "QUẦN ĐẢO HOÀNG SA",
+        "name_en": "Paracel Islands",
+        "type": "archipelago",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [112.0, 16.5]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Hoàng Sa Background",
+        "type": "flag_background",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [111.5, 17.0],
+          [112.8, 17.0],
+          [112.8, 16.0],
+          [111.5, 16.0],
+          [111.5, 17.0]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Phú Lâm",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [112.3, 16.6]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Linh Côn",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [112.4, 16.5]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Bắc Đảo",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [112.2, 16.7]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Nam Đảo",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [112.1, 16.4]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Hữu Nhật",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [112.5, 16.6]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Quang Hòa",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [111.9, 16.6]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Hoàng Sa",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [112.3, 16.4]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Duy Mộng",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [111.8, 16.5]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Tri Tôn",
+        "type": "island",
+        "group": "hoang-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [112.6, 16.5]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "QUẦN ĐẢO TRƯỜNG SA",
+        "name_en": "Spratly Islands",
+        "type": "archipelago",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.0, 10.0]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Trường Sa Background",
+        "type": "flag_background",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [113.3, 11.8],
+          [115.2, 11.8],
+          [115.2, 8.0],
+          [113.3, 8.0],
+          [113.3, 11.8]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Song Tử Tây",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.3, 11.4]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Trường Sa",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.2, 8.6]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Sinh Tồn",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.9, 11.5]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Nam Yết",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.4, 10.2]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Sơn Ca",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.3, 10.4]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Phan Vinh",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [113.8, 8.3]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo An Bàng",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [113.9, 10.8]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Thuyền Chài",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.5, 9.8]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Đá Tây A",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [113.7, 11.1]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Đá Đông",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.1, 9.2]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Đá Lớn",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.6, 10.5]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Đá Nam",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [113.8, 9.5]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Len Đao",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.2, 10.6]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Tốc Tan",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.4, 11.0]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Đảo Cô Lin",
+        "type": "island",
+        "group": "truong-sa"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [114.7, 9.3]
+      }
+    }
+  ]
+}

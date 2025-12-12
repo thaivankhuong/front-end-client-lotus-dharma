@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Leaflet CSS Overrides */
+@import 'leaflet/dist/leaflet.css';
+
+.leaflet-container {
+  width: 100%;
+  height: 100vh;
+  z-index: 0;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.leaflet-popup-content {
+  margin: 12px 16px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.leaflet-tooltip {
+  background-color: rgba(0, 0, 0, 0.8);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+/* Fix marker icons */
+.leaflet-default-icon-path {
+  background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
+}
+
+/* Province label markers - Labels chỉ hiển thị trong lãnh thổ Việt Nam */
+.province-label-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.province-label-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1e293b;
+  text-shadow: 
+    1px 1px 2px rgba(255, 255, 255, 0.9),
+    -1px -1px 2px rgba(255, 255, 255, 0.9),
+    1px -1px 2px rgba(255, 255, 255, 0.9),
+    -1px 1px 2px rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.province-label-text.selected {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+/* Maritime labels styling - Hoàng Sa, Trường Sa, Biển Đông */
+.maritime-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-weight: bold !important;
+  font-size: 14px !important;
+  color: #365314 !important;
+  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8) !important;
+  white-space: normal !important;
+  text-align: center !important;
+}
+
+.maritime-label::before {
+  display: none !important;
+}
+
+/* Maritime main label - tên quần đảo chính */
+.maritime-label-main {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.maritime-label-main::before {
+  display: none !important;
+}
+
+/* Island tooltip - cho các đảo nhỏ - improved styling */
+.island-tooltip {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1.5px solid #dc2626 !important;
+  border-radius: 4px !important;
+  color: #dc2626 !important;
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+.island-tooltip::before {
+  border-top-color: #dc2626 !important;
+}
+
+/* Sea label - Biển Đông */
+.sea-label-main {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.sea-label-main::before {
+  display: none !important;
+}
