@@ -102,11 +102,12 @@ function convertCommuneToGeoJSON(communes: CommuneAPIResponse[]): FeatureCollect
                 geometry: parsedGeometry,
                 properties: {
                     code: commune.communeId,
-                    name: commune.name,
-                    name_with_type: commune.nameNew || commune.name, // Use nameNew if available
-                    path: `${commune.name}`,
+                    name: commune.name, // Display name (original name)
+                    nameNew: commune.nameNew, // New name after merger (if any)
                     type: commune.type,
                     provinceId: commune.provinceId,
+                    areaKm2: commune.areaKm2,
+                    population: commune.population,
                 }
             };
         }).filter(Boolean) as Feature[]
@@ -120,6 +121,10 @@ export default function LeafletMapAPI() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Track currently highlighted layer to reset it when hovering over another
+    const highlightedLayerRef = useRef<L.Layer | null>(null);
+    const highlightedCommuneLayerRef = useRef<L.Layer | null>(null);
+
     // Layer control state
     const [layers, setLayers] = useState<LayerControlState>({
         showProvinces: true,
@@ -127,8 +132,8 @@ export default function LeafletMapAPI() {
         basemap: 'terrain'
     });
 
-    // Opacity control state
-    const [opacity, setOpacity] = useState(1.0);
+    // Opacity control state - Default 0.3
+    const [opacity, setOpacity] = useState(0.3);
 
     // Load provinces on mount from API
     useEffect(() => {
@@ -207,8 +212,46 @@ export default function LeafletMapAPI() {
         layer.on({
             mouseover: (e: L.LeafletMouseEvent) => {
                 const target = e.target;
+
+                // Reset previously highlighted layer if it exists
+                if (highlightedLayerRef.current && highlightedLayerRef.current !== target) {
+                    const prevLayer = highlightedLayerRef.current as any;
+                    const prevFeature = prevLayer.feature;
+                    const prevProps = prevFeature?.properties;
+                    const isPrevSelected = prevProps?.code === selectedProvince;
+                    const hasCommunes = communes && communes.features.length > 0;
+                    const prevBaseStyle = getProvinceStyle(prevFeature, isPrevSelected);
+
+                    // Reset previous layer to its original style
+                    if (isPrevSelected && hasCommunes) {
+                        prevLayer.setStyle({
+                            ...prevBaseStyle,
+                            fillOpacity: 0.05,
+                            weight: 3,
+                            color: '#dc2626',
+                            opacity: 1,
+                        });
+                    } else if (hasCommunes && !isPrevSelected) {
+                        prevLayer.setStyle({
+                            ...prevBaseStyle,
+                            fillOpacity: 0,
+                            weight: 2,
+                            opacity: 1,
+                        });
+                    } else {
+                        prevLayer.setStyle({
+                            ...prevBaseStyle,
+                            fillOpacity: prevBaseStyle.fillOpacity! * opacity,
+                        });
+                    }
+                }
+
+                // Highlight current layer
                 target.setStyle(getHighlightStyle());
                 target.bringToFront();
+
+                // Store reference to currently highlighted layer
+                highlightedLayerRef.current = target;
             },
             mouseout: (e: L.LeafletMouseEvent) => {
                 const target = e.target;
@@ -238,6 +281,11 @@ export default function LeafletMapAPI() {
                         fillOpacity: baseStyle.fillOpacity! * opacity,
                     });
                 }
+
+                // Clear reference if this was the highlighted layer
+                if (highlightedLayerRef.current === target) {
+                    highlightedLayerRef.current = null;
+                }
             },
             click: (e: L.LeafletMouseEvent) => {
                 const provinceCode = props.code;
@@ -250,9 +298,12 @@ export default function LeafletMapAPI() {
                     // Select new province
                     setSelectedProvince(provinceCode);
 
-                    // Zoom to province bounds
+                    // Zoom to province bounds with deeper zoom to see communes clearly
                     const bounds = e.target.getBounds();
-                    e.target._map.fitBounds(bounds, { padding: [50, 50] });
+                    e.target._map.fitBounds(bounds, {
+                        padding: [50, 50],
+                        maxZoom: 10  // Zoom sâu hơn để thấy rõ các xã
+                    });
                 }
             },
         });
@@ -282,12 +333,27 @@ export default function LeafletMapAPI() {
         layer.on({
             mouseover: (e: L.LeafletMouseEvent) => {
                 const target = e.target;
+
+                // Reset previously highlighted commune if it exists
+                if (highlightedCommuneLayerRef.current && highlightedCommuneLayerRef.current !== target) {
+                    const prevLayer = highlightedCommuneLayerRef.current as any;
+                    const baseStyle = getCommuneStyle();
+                    prevLayer.setStyle({
+                        ...baseStyle,
+                        fillOpacity: baseStyle.fillOpacity! * opacity,
+                    });
+                }
+
+                // Highlight current commune
                 target.setStyle({
                     weight: 3.5,
                     color: '#fbbf24',  // Vàng highlight
                     fillOpacity: 0.8,
                 });
                 target.bringToFront(); // Đưa lên trên cùng khi hover
+
+                // Store reference to currently highlighted commune
+                highlightedCommuneLayerRef.current = target;
             },
             mouseout: (e: L.LeafletMouseEvent) => {
                 const target = e.target;
@@ -297,21 +363,61 @@ export default function LeafletMapAPI() {
                     ...baseStyle,
                     fillOpacity: baseStyle.fillOpacity! * opacity, // Apply opacity slider
                 });
+
+                // Clear reference if this was the highlighted commune
+                if (highlightedCommuneLayerRef.current === target) {
+                    highlightedCommuneLayerRef.current = null;
+                }
             },
         });
 
-        // Tooltip for commune
+        // Tooltip for commune - Beautiful modern design
+        const formatNumber = (num: number | undefined) => {
+            if (!num) return 'N/A';
+            return num.toLocaleString('vi-VN');
+        };
+
         const tooltipContent = `
-      <div class="text-xs font-sans">
-        <div class="font-semibold text-green-700">${props.name_with_type || props.name || 'N/A'}</div>
-        <div class="text-gray-600 text-[10px] mt-0.5">${props.path || ''}</div>
+      <div class="font-sans bg-white rounded-lg shadow-lg p-3 min-w-[200px]">
+        <div class="flex items-start gap-2 mb-2">
+          <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+          <div class="flex-1">
+            <div class="font-bold text-sm text-gray-900 leading-tight">${props.name || 'N/A'}</div>
+            <div class="text-xs text-purple-600 mt-0.5">${props.type || ''}</div>
+          </div>
+        </div>
+        
+        <div class="border-t border-gray-200 pt-2 space-y-1.5">
+          <div class="flex items-center gap-2 text-xs">
+            <svg class="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+            </svg>
+            <span class="text-gray-600">Diện tích:</span>
+            <span class="font-semibold text-gray-900">${formatNumber(props.areaKm2)} km²</span>
+          </div>
+          
+          <div class="flex items-center gap-2 text-xs">
+            <svg class="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+            <span class="text-gray-600">Dân số:</span>
+            <span class="font-semibold text-gray-900">${formatNumber(props.population)}</span>
+          </div>
+        </div>
       </div>
     `;
 
         layer.bindTooltip(tooltipContent, {
             permanent: false,
             sticky: true,
-            className: 'custom-tooltip',
+            className: 'custom-tooltip-commune',
+            direction: 'top',
+            offset: [0, -10]
         });
     };
 

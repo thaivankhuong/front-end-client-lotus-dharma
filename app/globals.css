@@ -142,3 +142,37 @@ body {
 .sea-label-main::before {
   display: none !important;
 }
+
+/* Custom tooltip for communes - Modern beautiful design */
+.custom-tooltip-commune {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.custom-tooltip-commune::before {
+  display: none !important;
+}
+
+.custom-tooltip-commune .leaflet-tooltip-content {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Commune labels - Hiển thị tên xã khi zoom >= 9 */
+.commune-label-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.commune-label-text {
+  font-size: 9px;
+  font-weight: 500;
+  color: #059669;
+  text-shadow: 
+    1px 1px 1px rgba(255, 255, 255, 0.9),
+    -1px -1px 1px rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+}
