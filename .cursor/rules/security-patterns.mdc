@@ -1,0 +1,313 @@
+---
+description: Security patterns for authentication, CSRF protection, and data sanitization
+globs: **/*.{ts,tsx}
+alwaysApply: false
+---
+
+# LotusDharma Security Patterns
+
+## Authentication Boundary
+
+### JWT + HttpOnly Refresh Token
+```typescript
+// lib/auth/middleware.ts (Server-side auth)
+import { NextRequest, NextResponse } from 'next/server';
+import { jwtVerify } from 'jose';
+
+export async function authMiddleware(request: NextRequest) {
+  const accessToken = request.headers.get('authorization')?.replace('Bearer ', '');
+
+  if (!accessToken) {
+    return NextResponse.json({ error: 'No access token' }, { status: 401 });
+  }
+
+  try {
+    const { payload } = await jwtVerify(accessToken, new TextEncoder().encode(process.env.JWT_SECRET));
+    request.user = payload;
+    return NextResponse.next();
+  } catch (error) {
+    // Try refresh via BFF route
+    return NextResponse.redirect(new URL('/api/auth/refresh', request.url));
+  }
+}
+
+// middleware.ts (Global middleware)
+export default authMiddleware;
+```
+
+### Client-side Auth Guards
+```typescript
+// lib/auth/guards.tsx
+export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <LoadingSpinner />;
+
+  if (!user) {
+    redirect('/login');
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
+// Usage in protected routes
+export default function ProtectedPage() {
+  return (
+    <AuthGuard>
+      <DashboardContent />
+    </AuthGuard>
+  );
+}
+```
+
+## CSRF Protection
+
+### CSRF Tokens for Mutations
+```typescript
+// lib/auth/csrf.ts
+import { randomBytes } from 'crypto';
+
+export function generateCSRFToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+export function validateCSRFToken(token: string, sessionToken: string): boolean {
+  if (!token || !sessionToken) return false;
+
+  // Timing-safe comparison
+  return token === sessionToken;
+}
+
+// app/api/csrf/route.ts
+export async function GET() {
+  const token = generateCSRFToken();
+
+  // Store in session/encrypted cookie
+  const response = NextResponse.json({ csrfToken: token });
+  response.cookies.set('csrf-token', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict'
+  });
+
+  return response;
+}
+```
+
+### Form Submissions with CSRF
+```typescript
+// components/forms/SecureForm.tsx
+export function SecureForm({ onSubmit, children }: FormProps) {
+  const { data: csrfData } = useQuery({
+    queryKey: ['csrf'],
+    queryFn: () => fetch('/api/csrf').then(r => r.json()),
+    staleTime: 10 * 60 * 1000 // 10 minutes
+  });
+
+  const handleSubmit = (data: any) => {
+    onSubmit({
+      ...data,
+      csrfToken: csrfData?.csrfToken
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="hidden" name="csrfToken" value={csrfData?.csrfToken} />
+      {children}
+    </form>
+  );
+}
+```
+
+## XSS Prevention & Content Sanitization
+
+### Input Sanitization
+```typescript
+// lib/utils/security.ts
+import DOMPurify from 'isomorphic-dompurify';
+
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'a'],
+    ALLOWED_ATTR: ['href', 'target', 'rel'],
+    ALLOW_DATA_ATTR: false
+  });
+}
+
+export function sanitizeUserInput(input: string): string {
+  // Remove script tags and event handlers
+  return input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/on\w+\s*=/gi, '');
+}
+
+// Usage in components
+export function SafeHtml({ html }: { html: string }) {
+  return <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }} />;
+}
+```
+
+### URL Validation
+```typescript
+// lib/utils/validation.ts
+import { z } from 'zod';
+
+export const secureUrlSchema = z.string().url().refine(
+  (url) => {
+    const parsedUrl = new URL(url);
+    // Only allow http/https, no javascript: or data:
+    return ['http:', 'https:'].includes(parsedUrl.protocol);
+  },
+  { message: 'Invalid URL protocol' }
+);
+```
+
+## Security Headers & CORS
+
+### Next.js Security Headers
+```typescript
+// next.config.js
+module.exports = {
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: https:",
+              "font-src 'self'",
+              "connect-src 'self' https://api.lotusdharma.com"
+            ].join('; ')
+          }
+        ]
+      }
+    ];
+  }
+};
+```
+
+### CORS Configuration
+```typescript
+// lib/config/cors.ts
+export const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://lotusdharma.com', 'https://www.lotusdharma.com']
+    : ['http://localhost:3000', 'http://localhost:3001'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+};
+
+// middleware.ts
+import Cors from 'cors';
+
+const cors = Cors(corsOptions);
+
+export default function middleware(req: NextRequest) {
+  if (req.method === 'OPTIONS') {
+    return new NextResponse(null, { status: 200 });
+  }
+
+  return cors(req);
+}
+```
+
+## Rate Limiting
+
+### Edge Rate Limiting
+```typescript
+// middleware.ts
+import { Ratelimit } from '@upstash/ratelimit';
+import { kv } from '@vercel/kv';
+
+const ratelimit = new Ratelimit({
+  redis: kv,
+  limiter: Ratelimit.slidingWindow(100, '1 m'), // 100 requests per minute
+});
+
+export default async function middleware(request: NextRequest) {
+  const ip = request.ip ?? '127.0.0.1';
+
+  const { success, reset } = await ratelimit.limit(ip);
+
+  if (!success) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': reset.toString()
+        }
+      }
+    );
+  }
+
+  return NextResponse.next();
+}
+```
+
+### API-specific Rate Limiting
+```typescript
+// lib/api/utils/rate-limit.ts
+export async function checkApiRateLimit(userId: string, endpoint: string): Promise<boolean> {
+  const key = `api:${userId}:${endpoint}`;
+  const requests = await redis.incr(key);
+
+  if (requests === 1) {
+    await redis.expire(key, 60); // 1 minute window
+  }
+
+  return requests <= 10; // 10 requests per minute per user per endpoint
+}
+
+// Usage in API routes
+export async function POST(request: NextRequest) {
+  const userId = request.user?.id;
+
+  if (userId && !await checkApiRateLimit(userId, '/api/teachings/complete')) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+  }
+
+  // Process request...
+}
+```
+
+## Security Monitoring
+
+### Security Event Logging
+```typescript
+// lib/monitoring/security-events.ts
+export type SecurityEvent = {
+  type: 'auth_failure' | 'csrf_violation' | 'rate_limit_hit' | 'suspicious_activity';
+  userId?: string;
+  ip: string;
+  userAgent: string;
+  details: Record<string, any>;
+  timestamp: Date;
+};
+
+export function logSecurityEvent(event: SecurityEvent) {
+  // Send to security monitoring service
+  if (process.env.SECURITY_WEBHOOK_URL) {
+    fetch(process.env.SECURITY_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event)
+    }).catch(console.error);
+  }
+
+  // Log locally for development
+  console.warn('Security Event:', event);
+}
+```

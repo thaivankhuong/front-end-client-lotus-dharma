@@ -1,0 +1,163 @@
+---
+description: API client patterns with OpenAPI types, error handling, and resilience
+globs: lib/api/**/*
+alwaysApply: false
+---
+
+# LotusDharma API Patterns
+
+## Typed API Client
+
+### OpenAPI Integration
+```typescript
+// lib/api/types/generated.ts (auto-generated from /swagger/v1/swagger.json)
+export interface DharmaTeaching {
+  id: string;
+  title: string;
+  content: string;
+  authorId: string;
+  createdAt: string;
+}
+
+// lib/api/client.ts
+export class ApiClient {
+  private baseURL = process.env.NEXT_PUBLIC_API_URL;
+
+  async request<T>(endpoint: string, options?: RequestOptions): Promise<T> {
+    return withRetry(
+      () => this.fetchWithCircuitBreaker(endpoint, options),
+      { maxAttempts: 3, backoffMs: 1000 }
+    );
+  }
+}
+
+// lib/api/data.ts
+export class DataApi extends ApiClient {
+  async getTeachings(params?: TeachingFilters): Promise<TeachingResponse> {
+    return this.request('/api/teachings', {
+      next: { tags: ['teachings'] } // Cache tags for invalidation
+    });
+  }
+}
+```
+
+## Error Handling & Resilience
+
+### Circuit Breaker Pattern
+```typescript
+// lib/api/utils/circuit-breaker.ts
+export class CircuitBreaker {
+  private failures = 0;
+  private state: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.state === 'OPEN') {
+      throw new CircuitBreakerError('Service unavailable');
+    }
+
+    try {
+      const result = await fn();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+}
+```
+
+### Error Normalization
+```typescript
+// lib/api/utils/error-handling.ts
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code: string,
+    public correlationId: string
+  ) {
+    super(message);
+  }
+}
+
+export function normalizeApiError(error: unknown, correlationId: string): ApiError {
+  if (error instanceof ApiError) return error;
+
+  if (error instanceof Response) {
+    return new ApiError(
+      'API request failed',
+      error.status,
+      'API_ERROR',
+      correlationId
+    );
+  }
+
+  return new ApiError(
+    error instanceof Error ? error.message : 'Unknown error',
+    500,
+    'UNKNOWN_ERROR',
+    correlationId
+  );
+}
+```
+
+## Authentication Flow
+
+### JWT + Refresh Token Pattern
+```typescript
+// lib/api/auth.ts
+export class AuthApi extends ApiClient {
+  async login(credentials: LoginRequest): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    // Refresh token stored in HttpOnly cookie automatically
+    // Access token returned in response
+    return response;
+  }
+
+  async refresh(): Promise<AuthResponse> {
+    // Refresh token sent via HttpOnly cookie
+    return this.request<AuthResponse>('/auth/refresh', {
+      method: 'POST'
+    });
+  }
+}
+
+// app/api/auth/refresh/route.ts (BFF for token refresh)
+export async function POST() {
+  try {
+    const response = await authApi.refresh();
+    return NextResponse.json(response);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Refresh failed' },
+      { status: 401 }
+    );
+  }
+}
+```
+
+## Request Deduplication
+
+### TanStack Query Integration
+```typescript
+// lib/hooks/use-teachings.ts
+export function useTeachings(filters?: TeachingFilters) {
+  return useQuery({
+    queryKey: ['teachings', filters],
+    queryFn: () => dataApi.getTeachings(filters),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,   // 10 minutes
+  });
+}
+
+// Automatic deduplication - multiple calls with same key share cache
+const { data: teachings1 } = useTeachings({ category: 'mindfulness' });
+const { data: teachings2 } = useTeachings({ category: 'mindfulness' });
+// Only one API call made
+```

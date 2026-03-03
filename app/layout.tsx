@@ -17,9 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi">
-      <body className={inter.className}>
-        <MapUsingAPIContainer />
+    <html lang="vi" suppressHydrationWarning>
+      <body className={inter.className} suppressHydrationWarning>
         {children}
       </body>
     </html>

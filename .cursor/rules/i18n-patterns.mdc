@@ -1,0 +1,353 @@
+---
+description: Internationalization patterns for Vietnamese + English support
+globs: **/*.{ts,tsx}
+alwaysApply: false
+---
+
+# LotusDharma i18n Patterns
+
+## i18n-ready Architecture
+
+### Translation File Structure
+```typescript
+// lib/i18n/locales/vi.json
+{
+  "nav": {
+    "home": "Trang chủ",
+    "teachings": "Bài giảng",
+    "meditation": "Thiền tập",
+    "profile": "Hồ sơ"
+  },
+  "teachings": {
+    "title": "Bài giảng Phật pháp",
+    "description": "Khám phá những bài giảng quý báu về Phật pháp"
+  },
+  "auth": {
+    "login": "Đăng nhập",
+    "logout": "Đăng xuất",
+    "email": "Email",
+    "password": "Mật khẩu"
+  }
+}
+
+// lib/i18n/locales/en.json
+{
+  "nav": {
+    "home": "Home",
+    "teachings": "Teachings",
+    "meditation": "Meditation",
+    "profile": "Profile"
+  },
+  "teachings": {
+    "title": "Dharma Teachings",
+    "description": "Explore precious teachings about Buddhist Dharma"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "email": "Email",
+    "password": "Password"
+  }
+}
+```
+
+### i18n Configuration
+```typescript
+// lib/i18n/config.ts
+export const i18nConfig = {
+  locales: ['vi', 'en'] as const,
+  defaultLocale: 'vi',
+  localeDetection: true,
+  domains: [
+    {
+      domain: 'lotusdharma.com',
+      defaultLocale: 'vi'
+    },
+    {
+      domain: 'en.lotusdharma.com',
+      defaultLocale: 'en'
+    }
+  ]
+} as const;
+
+export type Locale = typeof i18nConfig.locales[number];
+```
+
+### Translation Hook
+```typescript
+// lib/hooks/use-translation.ts
+import { useRouter } from 'next/router';
+
+export function useTranslation(namespace?: string) {
+  const { locale, defaultLocale } = useRouter();
+
+  return useMemo(() => {
+    const loadTranslations = async (lang: string) => {
+      try {
+        const translations = await import(`../i18n/locales/${lang}.json`);
+        return namespace ? translations[namespace] : translations;
+      } catch (error) {
+        console.warn(`Translation file not found for locale: ${lang}`);
+        return {};
+      }
+    };
+
+    return {
+      t: (key: string, fallback?: string) => {
+        const keys = key.split('.');
+        let value = translations;
+
+        for (const k of keys) {
+          value = value?.[k];
+        }
+
+        return value || fallback || key;
+      },
+      locale,
+      loadTranslations
+    };
+  }, [locale, namespace]);
+}
+
+// Usage
+export function Navigation() {
+  const { t } = useTranslation('nav');
+
+  return (
+    <nav>
+      <Link href="/">{t('home')}</Link>
+      <Link href="/teachings">{t('teachings')}</Link>
+    </nav>
+  );
+}
+```
+
+## Internationalized Routing
+
+### Route Structure for Multi-language
+```
+app/
+├── (public)/
+│   ├── [locale]/
+│   │   ├── page.tsx          # /vi, /en
+│   │   ├── teachings/
+│   │   │   └── page.tsx      # /vi/teachings, /en/teachings
+│   │   └── meditation/
+│   │       └── page.tsx      # /vi/meditation, /en/meditation
+│   └── page.tsx              # Redirect to /vi
+├── (auth)/
+│   └── [locale]/
+│       ├── login/
+│       │   └── page.tsx      # /vi/login, /en/login
+│       └── dashboard/
+│           └── page.tsx      # /vi/dashboard, /en/dashboard
+```
+
+### Locale-aware Components
+```typescript
+// components/ui/LocaleSwitcher.tsx
+export function LocaleSwitcher() {
+  const router = useRouter();
+  const { locales, locale: currentLocale } = router;
+
+  const switchLocale = (newLocale: string) => {
+    const { pathname, query, asPath } = router;
+    router.push({ pathname, query }, asPath, { locale: newLocale });
+  };
+
+  return (
+    <select
+      value={currentLocale}
+      onChange={(e) => switchLocale(e.target.value)}
+    >
+      {locales?.map((locale) => (
+        <option key={locale} value={locale}>
+          {locale === 'vi' ? 'Tiếng Việt' : 'English'}
+        </option>
+      ))}
+    </select>
+  );
+}
+```
+
+## Content Internationalization
+
+### Dynamic Content Translation
+```typescript
+// lib/api/content.ts
+export interface TranslatedContent {
+  vi: string;
+  en: string;
+}
+
+export async function getTranslatedTeaching(id: string, locale: Locale): Promise<Teaching> {
+  const teaching = await db.teachings.findUnique({ where: { id } });
+
+  if (!teaching) throw new NotFoundError('Teaching not found');
+
+  return {
+    id: teaching.id,
+    title: teaching.translations[locale]?.title || teaching.translations.vi.title,
+    content: teaching.translations[locale]?.content || teaching.translations.vi.content,
+    author: teaching.author,
+    createdAt: teaching.createdAt
+  };
+}
+
+// API route with locale support
+// app/api/[locale]/teachings/[id]/route.ts
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { locale: string; id: string } }
+) {
+  const { locale, id } = params;
+
+  if (!i18nConfig.locales.includes(locale as Locale)) {
+    return NextResponse.json({ error: 'Invalid locale' }, { status: 400 });
+  }
+
+  try {
+    const teaching = await getTranslatedTeaching(id, locale as Locale);
+    return NextResponse.json(teaching);
+  } catch (error) {
+    return NextResponse.json({ error: 'Teaching not found' }, { status: 404 });
+  }
+}
+```
+
+### SEO & Metadata i18n
+
+### Localized Metadata
+```typescript
+// app/[locale]/teachings/[slug]/page.tsx
+export async function generateMetadata({ params }: { params: { locale: string; slug: string } }) {
+  const { locale, slug } = params;
+  const teaching = await getTranslatedTeaching(slug, locale as Locale);
+
+  return {
+    title: teaching.title,
+    description: teaching.excerpt,
+    alternates: {
+      canonical: `/${locale}/teachings/${slug}`,
+      languages: {
+        vi: `/vi/teachings/${slug}`,
+        en: `/en/teachings/${slug}`
+      }
+    },
+    openGraph: {
+      title: teaching.title,
+      description: teaching.excerpt,
+      locale: locale,
+      alternateLocale: locale === 'vi' ? 'en' : 'vi'
+    }
+  };
+}
+```
+
+### Structured Data i18n
+```typescript
+// lib/seo/structured-data.ts
+export function generateArticleStructuredData(
+  teaching: Teaching,
+  locale: Locale
+): object {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: teaching.title,
+    description: teaching.excerpt,
+    author: {
+      '@type': 'Person',
+      name: teaching.author.name
+    },
+    datePublished: teaching.createdAt,
+    dateModified: teaching.updatedAt,
+    inLanguage: locale,
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': `${process.env.NEXT_PUBLIC_SITE_URL}/${locale}/teachings/${teaching.slug}`
+    }
+  };
+}
+```
+
+## Development Workflow
+
+### Translation Keys Convention
+```typescript
+// ✅ GOOD: Semantic keys
+t('auth.login.button')           // "Đăng nhập"
+t('teachings.list.empty')        // "Không có bài giảng nào"
+
+// ❌ BAD: Non-semantic keys
+t('button1')                     // Unclear meaning
+t('text123')                     // No context
+```
+
+### Missing Translation Detection
+```typescript
+// lib/i18n/utils.ts
+export function detectMissingTranslations(locale: Locale): string[] {
+  const defaultTranslations = require('./locales/vi.json');
+  const localeTranslations = require(`./locales/${locale}.json`);
+
+  const missing: string[] = [];
+
+  function checkNested(obj: any, path = '') {
+    for (const key in obj) {
+      const fullPath = path ? `${path}.${key}` : key;
+
+      if (typeof obj[key] === 'object') {
+        checkNested(obj[key], fullPath);
+      } else if (!localeTranslations[key]) {
+        missing.push(fullPath);
+      }
+    }
+  }
+
+  checkNested(defaultTranslations);
+  return missing;
+}
+
+// Usage in development
+if (process.env.NODE_ENV === 'development') {
+  const missing = detectMissingTranslations('en');
+  if (missing.length > 0) {
+    console.warn('Missing translations for en:', missing);
+  }
+}
+```
+
+## Performance Optimization
+
+### Translation Loading Strategy
+```typescript
+// lib/i18n/client.ts
+class TranslationLoader {
+  private cache = new Map<string, any>();
+
+  async loadTranslations(locale: string, namespaces: string[] = []) {
+    const cacheKey = `${locale}:${namespaces.join(',')}`;
+
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+
+    const translations = {};
+
+    for (const ns of ['common', ...namespaces]) {
+      try {
+        const module = await import(`./locales/${locale}/${ns}.json`);
+        translations[ns] = module.default;
+      } catch (error) {
+        console.warn(`Failed to load ${locale}/${ns}.json`);
+      }
+    }
+
+    this.cache.set(cacheKey, translations);
+    return translations;
+  }
+}
+
+export const translationLoader = new TranslationLoader();
+```

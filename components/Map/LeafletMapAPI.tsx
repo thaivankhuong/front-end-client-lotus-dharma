@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
 import { useState, useEffect, useRef } from 'react';
 import type { FeatureCollection, Feature } from 'geojson';
@@ -13,8 +14,7 @@ import CommuneLabels from './CommuneLabels';
 import LayerControl, { type LayerControlState } from './LayerControl';
 import OpacityControl from './OpacityControl';
 
-// API Base URL - Use Next.js API routes (proxy to backend)
-const API_BASE_URL = '/api';
+import { API_BASE_URL } from '@/lib/config/env';
 
 // Interface for Province API response
 interface ProvinceAPIResponse {
@@ -115,6 +115,8 @@ function convertCommuneToGeoJSON(communes: CommuneAPIResponse[]): FeatureCollect
 }
 
 export default function LeafletMapAPI() {
+    console.log('🗺️ Map mounted - LeafletMapAPI component initialized');
+
     const [provinces, setProvinces] = useState<FeatureCollection | null>(null);
     const [communes, setCommunes] = useState<FeatureCollection | null>(null);
     const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
@@ -143,21 +145,41 @@ export default function LeafletMapAPI() {
                 setLoading(true);
                 setError(null);
 
-                const response = await fetch(`${API_BASE_URL}/provinces?IncludeGeometry=true`);
+                console.log('🚀 API call started - Fetching provinces from:', `${API_BASE_URL}/provinces?IncludeGeometry=true`);
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+                const response = await fetch(`${API_BASE_URL}/provinces?IncludeGeometry=true`, {
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                });
+
+                clearTimeout(timeoutId);
+
+                console.log('📡 Response status:', response.status);
 
                 if (!response.ok) {
-                    throw new Error(`Failed to fetch provinces: ${response.statusText}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
                 const data: ProvinceAPIResponse[] = await response.json();
-                console.log(`✅ Loaded ${data.length} provinces from API`);
+                console.log(`✅ Loaded ${data.length} provinces from API`, data[0]);
 
                 const geoJSON = convertProvinceToGeoJSON(data);
                 setProvinces(geoJSON);
                 setLoading(false);
             } catch (err) {
                 console.error('❌ Error loading provinces from API:', err);
-                setError(err instanceof Error ? err.message : 'Unknown error');
+
+                if (err instanceof Error && err.name === 'AbortError') {
+                    setError('Request timeout - API may not be accessible');
+                } else {
+                    setError(err.message);
+                }
+
                 setLoading(false);
             }
         };
@@ -421,6 +443,9 @@ export default function LeafletMapAPI() {
         });
     };
 
+    // Use a unique ID for each instance to prevent "Map container is already initialized"
+    const [mapId] = useState(() => `leaflet-map-${Math.random().toString(36).substring(2, 9)}`);
+
     return (
         <div className="relative h-screen w-full">
             {loading && (
@@ -442,6 +467,8 @@ export default function LeafletMapAPI() {
             )}
 
             <MapContainer
+                id={mapId}
+                key={mapId}
                 center={[16.0, 107.0]}
                 zoom={6}
                 style={{ height: '100%', width: '100%' }}
