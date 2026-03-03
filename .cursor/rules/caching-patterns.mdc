@@ -1,0 +1,187 @@
+---
+description: Caching strategies for high-scale Next.js applications
+globs: **/*.{ts,tsx}
+alwaysApply: false
+---
+
+# LotusDharma Caching Patterns
+
+## CDN/Edge Cache Strategy
+
+### Static Assets (Long-term Cache)
+```typescript
+// next.config.js
+module.exports = {
+  async headers() {
+    return [
+      {
+        source: '/images/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }
+        ]
+      },
+      {
+        source: '/fonts/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }
+        ]
+      }
+    ];
+  }
+};
+```
+
+### Public Pages (ISR + CDN)
+```typescript
+// app/(public)/teachings/page.tsx
+export const revalidate = 3600; // 1 hour ISR
+
+export default async function TeachingsPage() {
+  const teachings = await dataApi.getTeachings();
+  // ISR: Regenerated every hour at build time
+  // CDN: Cached at edge for instant delivery
+
+  return <TeachingsList teachings={teachings} />;
+}
+```
+
+## Next.js Fetch Cache
+
+### API Responses with Tags
+```typescript
+// lib/api/data.ts
+export async function getTeachings(): Promise<Teaching[]> {
+  const res = await fetch(`${API_URL}/teachings`, {
+    next: {
+      tags: ['teachings'],           // For cache invalidation
+      revalidate: 1800              // 30 minutes cache
+    }
+  });
+
+  if (!res.ok) throw new ApiError('Failed to fetch teachings');
+  return res.json();
+}
+```
+
+### Cache Invalidation via Webhooks
+```typescript
+// app/api/webhooks/cache-invalidate/route.ts
+export async function POST(request: NextRequest) {
+  const { tags, paths } = await request.json();
+
+  if (tags?.includes('teachings')) {
+    revalidateTag('teachings');
+  }
+
+  if (paths) {
+    await Promise.all(paths.map(path => revalidatePath(path)));
+  }
+
+  return NextResponse.json({ success: true });
+}
+```
+
+## TanStack Query Client Cache
+
+### User-specific Data Caching
+```typescript
+// lib/hooks/use-user-progress.ts
+export function useUserProgress() {
+  return useQuery({
+    queryKey: ['user', 'progress'],
+    queryFn: () => dataApi.getUserProgress(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000,    // 30 minutes
+    refetchOnWindowFocus: false,
+  });
+}
+
+// Optimistic Updates
+export function useCompleteTeaching() {
+  return useMutation({
+    mutationFn: (teachingId: string) => dataApi.completeTeaching(teachingId),
+    onMutate: async (teachingId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['user', 'progress'] });
+
+      // Snapshot previous value
+      const previousProgress = queryClient.getQueryData(['user', 'progress']);
+
+      // Optimistically update
+      queryClient.setQueryData(['user', 'progress'], (old: any) => ({
+        ...old,
+        completedTeachings: [...old.completedTeachings, teachingId]
+      }));
+
+      return { previousProgress };
+    },
+    onError: (err, teachingId, context) => {
+      // Revert on error
+      if (context?.previousProgress) {
+        queryClient.setQueryData(['user', 'progress'], context.previousProgress);
+      }
+    },
+    onSettled: () => {
+      // Always refetch after error or success
+      queryClient.invalidateQueries({ queryKey: ['user', 'progress'] });
+    },
+  });
+}
+```
+
+## Cache Hierarchy Matrix
+
+| Content Type | CDN | ISR | Fetch Cache | TanStack Query | When to Use |
+|-------------|-----|-----|-------------|----------------|-------------|
+| Static Assets | ✅ 1 year | ❌ | ❌ | ❌ | Images, fonts, icons |
+| Public Pages | ✅ 1 hour | ✅ 24h | ❌ | ❌ | Homepage, about, teachings |
+| Public Data | ✅ 5 min | ✅ 1h | ✅ 30m | ❌ | Categories, general data |
+| User Data | ❌ | ❌ | ✅ 5m | ✅ | Profile, progress, favorites |
+| Admin Data | ❌ | ❌ | ✅ 1m | ✅ | Analytics, user management |
+
+## Cache Debugging
+
+### Cache Status Monitoring
+```typescript
+// lib/monitoring/cache-metrics.ts
+export function logCacheHit(queryKey: string[], isHit: boolean) {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`Cache ${isHit ? 'HIT' : 'MISS'}: ${queryKey.join('.')}`);
+  }
+}
+
+// In query functions
+export async function getCachedData() {
+  const isCached = queryClient.getQueryData(['data']) !== undefined;
+  logCacheHit(['data'], isCached);
+
+  return queryClient.fetchQuery({
+    queryKey: ['data'],
+    queryFn: () => apiCall(),
+    staleTime: 5 * 60 * 1000
+  });
+}
+```
+
+### Manual Cache Management
+```typescript
+// lib/cache/utils.ts
+export const cacheUtils = {
+  // Force refresh specific queries
+  refreshUserData: () => queryClient.invalidateQueries({ queryKey: ['user'] }),
+
+  // Clear all caches
+  clearAllCaches: () => {
+    queryClient.clear();
+    // Also call server-side cache clear if needed
+  },
+
+  // Prefetch critical data
+  prefetchCriticalData: async () => {
+    await Promise.all([
+      queryClient.prefetchQuery({ queryKey: ['user', 'profile'], queryFn: getProfile }),
+      queryClient.prefetchQuery({ queryKey: ['teachings'], queryFn: getTeachings })
+    ]);
+  }
+};
+```

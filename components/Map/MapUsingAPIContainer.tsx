@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React from 'react';
 import dynamic from 'next/dynamic';
 
 // Dynamic import to avoid SSR issues
@@ -17,13 +17,6 @@ const LeafletMapAPI = dynamic(() => import('./LeafletMapAPI'), {
 });
 
 export default function MapUsingAPIContainer() {
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) return null;
-
+    console.log('🏗️ MapUsingAPIContainer rendered - Loading map component');
     return <LeafletMapAPI />;
 }

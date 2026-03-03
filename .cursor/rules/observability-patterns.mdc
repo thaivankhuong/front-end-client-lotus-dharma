@@ -1,0 +1,489 @@
+---
+description: Observability patterns for monitoring, logging, and error tracking
+globs: **/*.{ts,tsx}
+alwaysApply: false
+---
+
+# LotusDharma Observability Patterns
+
+## Error Tracking & Monitoring
+
+### Error Monitoring Setup
+```typescript
+// lib/monitoring/error-tracker.ts
+// Use Sentry, LogRocket, or custom error tracking
+
+interface ErrorTracker {
+  captureException(error: Error, context?: Record<string, any>): void;
+  captureMessage(message: string, level?: 'info' | 'warn' | 'error'): void;
+  setUser(user: { id: string; email?: string }): void;
+}
+
+// Placeholder implementation - replace with actual service
+export const errorTracker: ErrorTracker = {
+  captureException: (error, context) => {
+    console.error('Error captured:', error, context);
+    // Send to monitoring service when configured
+  },
+  captureMessage: (message, level = 'error') => {
+    console[level](message);
+    // Send to monitoring service when configured
+  },
+  setUser: (user) => {
+    console.log('User set:', user);
+    // Set user context in monitoring service
+  }
+};
+
+// Error boundary for React components
+export function ErrorBoundary({ children }: { children: React.ReactNode }) {
+  const [hasError, setHasError] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      errorTracker.captureException(event.error);
+      setHasError(true);
+      setError(event.error);
+    };
+
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  if (hasError) {
+    return (
+      <div className="error-boundary">
+        <h2>Có lỗi xảy ra</h2>
+        <p>Xin vui lòng thử lại hoặc liên hệ hỗ trợ.</p>
+        <button onClick={() => window.location.reload()}>Tải lại trang</button>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+```
+
+### Structured Logging
+```typescript
+// lib/monitoring/logger.ts
+import { z } from 'zod';
+
+const LogLevel = z.enum(['debug', 'info', 'warn', 'error']);
+const LogContext = z.object({
+  userId: z.string().optional(),
+  sessionId: z.string().optional(),
+  correlationId: z.string().optional(),
+  requestId: z.string().optional(),
+  component: z.string().optional(),
+  action: z.string().optional(),
+});
+
+export class Logger {
+  private context: z.infer<typeof LogContext> = {};
+
+  setContext(context: Partial<z.infer<typeof LogContext>>) {
+    this.context = { ...this.context, ...context };
+  }
+
+  private log(level: z.infer<typeof LogLevel>, message: string, data?: any) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      context: this.context,
+      data,
+      environment: process.env.NODE_ENV,
+    };
+
+    // Console for development
+    if (process.env.NODE_ENV === 'development') {
+      console[level](JSON.stringify(logEntry, null, 2));
+    }
+
+    // Send to monitoring service
+    if (process.env.LOG_WEBHOOK_URL && level !== 'debug') {
+      fetch(process.env.LOG_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(logEntry)
+      }).catch(() => {
+        // Silent fail to avoid log loops
+      });
+    }
+
+    // Sentry for errors
+    if (level === 'error') {
+      Sentry.captureMessage(message, {
+        level: 'error',
+        extra: { ...this.context, data }
+      });
+    }
+  }
+
+  debug(message: string, data?: any) { this.log('debug', message, data); }
+  info(message: string, data?: any) { this.log('info', message, data); }
+  warn(message: string, data?: any) { this.log('warn', message, data); }
+  error(message: string, data?: any) { this.log('error', message, data); }
+}
+
+export const logger = new Logger();
+
+// Request-scoped logging
+export function createRequestLogger(request: NextRequest) {
+  const correlationId = request.headers.get('x-correlation-id') ||
+                       request.headers.get('x-request-id') ||
+                       generateId();
+
+  logger.setContext({
+    correlationId,
+    requestId: correlationId,
+    userId: request.user?.id,
+    sessionId: request.headers.get('x-session-id')
+  });
+
+  return logger;
+}
+```
+
+## Performance Monitoring
+
+### Web Vitals Tracking
+```typescript
+// lib/monitoring/web-vitals.ts
+import { getCLS, getFID, getFCP, getLCP, getTTFB } from 'web-vitals';
+
+export function reportWebVitals({ name, delta, value, id }: any) {
+  // Send to analytics
+  if (typeof window !== 'undefined' && window.gtag) {
+    window.gtag('event', name, {
+      event_category: 'Web Vitals',
+      event_label: id,
+      value: Math.round(name === 'CLS' ? delta * 1000 : delta),
+      custom_map: { metric_value: value }
+    });
+  }
+
+  // Send to monitoring service
+  logger.info(`Web Vital: ${name}`, {
+    metric: name,
+    value,
+    delta,
+    id,
+    timestamp: Date.now()
+  });
+}
+
+// Initialize in _app.tsx
+if (typeof window !== 'undefined') {
+  getCLS(reportWebVitals);
+  getFID(reportWebVitals);
+  getFCP(reportWebVitals);
+  getLCP(reportWebVitals);
+  getTTFB(reportWebVitals);
+}
+```
+
+### API Performance Monitoring
+```typescript
+// lib/api/utils/performance.ts
+export async function withPerformanceMonitoring<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  context?: Record<string, any>
+): Promise<T> {
+  const startTime = Date.now();
+
+  try {
+    const result = await operation();
+    const duration = Date.now() - startTime;
+
+    logger.info(`API Operation: ${operationName}`, {
+      duration,
+      success: true,
+      ...context
+    });
+
+    // Alert on slow operations
+    if (duration > 5000) { // 5 seconds
+      logger.warn(`Slow API operation: ${operationName}`, {
+        duration,
+        threshold: 5000,
+        ...context
+      });
+    }
+
+    return result;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    logger.error(`API Operation Failed: ${operationName}`, {
+      duration,
+      error: error instanceof Error ? error.message : String(error),
+      ...context
+    });
+
+    throw error;
+  }
+}
+
+// Usage in API client
+export class MonitoredApiClient extends ApiClient {
+  async request<T>(endpoint: string, options?: RequestOptions): Promise<T> {
+    return withPerformanceMonitoring(
+      () => super.request<T>(endpoint, options),
+      `API ${options?.method || 'GET'} ${endpoint}`,
+      {
+        endpoint,
+        method: options?.method || 'GET',
+        userId: options?.userId
+      }
+    );
+  }
+}
+```
+
+## Tracing & Correlation
+
+### Request Correlation IDs
+```typescript
+// lib/monitoring/tracing.ts
+import { randomUUID } from 'crypto';
+
+export function generateCorrelationId(): string {
+  return randomUUID();
+}
+
+export function getCorrelationId(request: NextRequest): string {
+  return request.headers.get('x-correlation-id') ||
+         request.headers.get('x-request-id') ||
+         generateCorrelationId();
+}
+
+// Middleware to add correlation ID
+export function correlationMiddleware(request: NextRequest): NextResponse {
+  const correlationId = getCorrelationId(request);
+
+  const response = NextResponse.next();
+  response.headers.set('x-correlation-id', correlationId);
+
+  // Add to request for downstream use
+  (request as any).correlationId = correlationId;
+
+  return response;
+}
+```
+
+### Distributed Tracing
+```typescript
+// lib/monitoring/tracing.ts
+export interface TraceContext {
+  correlationId: string;
+  parentSpanId?: string;
+  spanId: string;
+  startTime: number;
+  tags: Record<string, string>;
+}
+
+export class Tracer {
+  private spans = new Map<string, TraceContext>();
+
+  startSpan(name: string, parentContext?: TraceContext): TraceContext {
+    const context: TraceContext = {
+      correlationId: parentContext?.correlationId || generateCorrelationId(),
+      parentSpanId: parentContext?.spanId,
+      spanId: randomUUID(),
+      startTime: Date.now(),
+      tags: {}
+    };
+
+    this.spans.set(context.spanId, context);
+
+    logger.info(`Span started: ${name}`, {
+      spanId: context.spanId,
+      parentSpanId: context.parentSpanId,
+      correlationId: context.correlationId
+    });
+
+    return context;
+  }
+
+  endSpan(context: TraceContext, result?: any, error?: Error) {
+    const duration = Date.now() - context.startTime;
+
+    logger.info(`Span ended`, {
+      spanId: context.spanId,
+      duration,
+      success: !error,
+      error: error?.message,
+      result: typeof result === 'object' ? JSON.stringify(result).slice(0, 500) : result
+    });
+
+    this.spans.delete(context.spanId);
+  }
+
+  async withSpan<T>(
+    name: string,
+    fn: (context: TraceContext) => Promise<T>,
+    parentContext?: TraceContext
+  ): Promise<T> {
+    const context = this.startSpan(name, parentContext);
+
+    try {
+      const result = await fn(context);
+      this.endSpan(context, result);
+      return result;
+    } catch (error) {
+      this.endSpan(context, undefined, error as Error);
+      throw error;
+    }
+  }
+}
+
+export const tracer = new Tracer();
+```
+
+## Health Checks & Metrics
+
+### Health Check Endpoint
+```typescript
+// app/api/health/route.ts
+export async function GET() {
+  const startTime = Date.now();
+
+  try {
+    // Check database connection
+    await db.$queryRaw`SELECT 1`;
+
+    // Check external API
+    const apiResponse = await fetch(`${process.env.API_URL}/health`, {
+      timeout: 5000
+    });
+
+    const health = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      responseTime: Date.now() - startTime,
+      checks: {
+        database: 'healthy',
+        api: apiResponse.ok ? 'healthy' : 'unhealthy'
+      }
+    };
+
+    return NextResponse.json(health);
+  } catch (error) {
+    logger.error('Health check failed', { error: error.message });
+
+    return NextResponse.json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    }, { status: 503 });
+  }
+}
+```
+
+### Application Metrics
+```typescript
+// lib/monitoring/metrics.ts
+export class MetricsCollector {
+  private metrics = new Map<string, number>();
+
+  increment(name: string, value = 1) {
+    const current = this.metrics.get(name) || 0;
+    this.metrics.set(name, current + value);
+  }
+
+  gauge(name: string, value: number) {
+    this.metrics.set(name, value);
+  }
+
+  timing(name: string, duration: number) {
+    // Record timing metrics
+    logger.info(`Timing: ${name}`, { duration });
+  }
+
+  async reportMetrics() {
+    const metrics = Object.fromEntries(this.metrics);
+
+    if (process.env.METRICS_WEBHOOK_URL) {
+      await fetch(process.env.METRICS_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timestamp: Date.now(),
+          metrics,
+          environment: process.env.NODE_ENV
+        })
+      });
+    }
+
+    // Reset counters
+    this.metrics.clear();
+  }
+}
+
+export const metrics = new MetricsCollector();
+
+// Usage throughout app
+metrics.increment('api_requests_total', 1);
+metrics.timing('api_response_time', responseTime);
+metrics.gauge('active_users', userCount);
+```
+
+## Alerting & Incident Response
+
+### Alert Configuration
+```typescript
+// lib/monitoring/alerts.ts
+export interface Alert {
+  type: 'error_rate' | 'performance' | 'security';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  message: string;
+  context: Record<string, any>;
+}
+
+export class AlertManager {
+  async sendAlert(alert: Alert) {
+    logger.error(`Alert: ${alert.type}`, alert);
+
+    // Send to alerting service
+    if (process.env.ALERT_WEBHOOK_URL) {
+      await fetch(process.env.ALERT_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...alert,
+          timestamp: new Date().toISOString(),
+          environment: process.env.NODE_ENV
+        })
+      });
+    }
+
+    // Critical alerts get additional notification
+    if (alert.severity === 'critical') {
+      // Send SMS, call, etc.
+      await this.escalateCriticalAlert(alert);
+    }
+  }
+
+  private async escalateCriticalAlert(alert: Alert) {
+    // Implementation for critical alert escalation
+    logger.error('CRITICAL ALERT - Immediate attention required', alert);
+  }
+}
+
+export const alertManager = new AlertManager();
+
+// Usage
+if (errorRate > 0.05) { // 5% error rate
+  await alertManager.sendAlert({
+    type: 'error_rate',
+    severity: 'high',
+    message: `Error rate exceeded threshold: ${(errorRate * 100).toFixed(2)}%`,
+    context: { errorRate, timeWindow: '5m' }
+  });
+}
+```
